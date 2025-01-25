@@ -1,8 +1,14 @@
 import jax
 import jax.numpy as jnp
+from functools import partial
 
 
 @jax.jit
+@partial(
+    jnp.vectorize,
+    excluded={2, "surfaces"},
+    signature="(3),(3)->(n,3),(m,3)",
+)
 def trace(pos, dir, surfaces):
     """trace paths of a ray through a list of surfaces
 
