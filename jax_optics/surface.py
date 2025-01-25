@@ -379,7 +379,7 @@ class PolySurface(Surface):
         r2 = jnp.polyadd(polymul(y, y), polymul(z, z))
 
         # coeffs contains even coefficients, so if we substitute r^2 into it,
-        # it works out the same as if we substituted r into an coeffs after
+        # it works out the same as if we substituted r into coeffs after
         # expansion
         x_t = poly_substitute(self.coeffs, r2)
 
