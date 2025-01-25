@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from .transform import Transform, Transform_field_names, wrap_transform_2d
 from dataclasses import dataclass
+from functools import partial
 
 
 @jax.jit
@@ -36,14 +37,47 @@ def poly_substitute(p_outer: jax.Array, p_inner: jax.Array) -> jax.Array:
 
 
 def first_real_pos_root(poly: jax.Array, select=None) -> jax.Array:
-    """find the first real non-negative (with some tolerance_ root of a polynomial"""
+    """find the first real non-negative (with some tolerance) root of a polynomial"""
+    if select is not None:
+        converted_fn, aux_args = jax.closure_convert(select, 0.0)
+    else:
+        converted_fn, aux_args = None, ()
+
+    return _first_real_pos_root(poly, converted_fn, aux_args)
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(1,))
+def _first_real_pos_root(poly: jax.Array, select, select_args) -> jax.Array:
     roots = jnp.roots(poly, strip_zeros=False)
 
-    full_select = jnp.isreal(roots) & (jnp.real(roots) > -1e-6)
+    real_roots = jnp.real(roots)
+    full_select = jnp.isreal(roots) & (real_roots > -1e-6)
     if select is not None:
-        full_select = full_select & jax.vmap(select)(roots)
+        full_select = full_select & jax.vmap(
+            lambda root, args: select(root, *args),
+            (0, None),
+        )(real_roots, select_args)
 
-    return jnp.min(jnp.real(roots), where=full_select, initial=jnp.inf)
+    return jnp.min(real_roots, where=full_select, initial=jnp.inf)
+
+
+# use a custom gradient, because the gradient of jnp.roots is badly behaved
+# (wrong or NAN) for polynomials with leading zeros (or near-zeros)
+@_first_real_pos_root.defjvp
+def _first_real_pos_root_jvp(select, primals, tangents):
+    poly, select_args = primals
+    poly_dot, select_args_dot = tangents
+
+    root = _first_real_pos_root(poly, select, select_args)
+
+    # TODO: generate this more efficiently?
+    scale = root ** jnp.arange(len(poly))[::-1]
+
+    poly_grad = jax.grad(jnp.polyval, 1)(poly, root)
+
+    grad = jnp.sum(poly_dot * scale / -poly_grad)
+
+    return root, grad
 
 
 def norm_vector(v: jax.Array) -> jax.Array:

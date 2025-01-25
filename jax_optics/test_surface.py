@@ -11,6 +11,7 @@ from .surface import (
     SpherePolyMod,
     Square,
     convolve_unrolled_full,
+    first_real_pos_root,
     norm_vector,
     poly_substitute,
 )
@@ -36,6 +37,22 @@ def test_poly_substitute():
     expected = np_Polynomial(p[::-1])(np_Polynomial(x[::-1])).coef[::-1]
 
     npt.assert_allclose(poly_substitute(jnp.array(p), jnp.array(x)), expected)
+
+
+def test_first_real_pos_root():
+    test_poly = jnp.array([0.0, 0.0, 0.0, 0.5, -1])
+
+    root = first_real_pos_root(test_poly)
+    npt.assert_allclose(root, 2.0)
+    grad = jax.grad(first_real_pos_root)(test_poly)
+
+    for i in range(len(test_poly)):
+        # step/tolerances are kind of big here, but there's quite a bit of
+        # precision loss in jnp.root
+        d = 1e-6
+        num_grad_i = (first_real_pos_root(test_poly.at[i].add(d)) - root) / d
+
+        npt.assert_allclose(num_grad_i, grad[i], rtol=1e-4)
 
 
 def test_Circle():
